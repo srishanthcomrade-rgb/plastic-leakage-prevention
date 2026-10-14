@@ -1,0 +1,101 @@
+
+import streamlit as st
+import pandas as pd
+
+from backend.main import (
+    DRAINS,
+    estimate_score,
+    downstream_nodes,
+)
+
+st.set_page_config(
+    page_title="Plastic Leakage Monitor",
+    page_icon="🌊",
+    layout="wide",
+)
+
+st.title("🌊 Plastic Leakage Prevention")
+st.write(
+    "Drainage hotspot analysis and cleanup prioritization"
+)
+
+st.warning(
+    "Prototype uses synthetic demonstration data. "
+    "Scores are not validated real-world predictions."
+)
+
+rainfall = st.selectbox(
+    "Rainfall scenario",
+    ["light", "moderate", "heavy"],
+)
+
+results = []
+
+for drain_id, drain in DRAINS.items():
+    if drain_id == "river_outlet":
+        continue
+
+    result = estimate_score(drain_id, rainfall)
+    result["downstream_pathways"] = ", ".join(
+        downstream_nodes(drain_id)
+    )
+    results.append(result)
+
+df = pd.DataFrame(results)
+df = df.sort_values(
+    "priority_score", ascending=False
+).reset_index(drop=True)
+
+df.insert(0, "Rank", range(1, len(df) + 1))
+
+c1, c2, c3 = st.columns(3)
+
+c1.metric("Locations analyzed", len(df))
+c2.metric(
+    "Top priority",
+    df.iloc[0]["name"] if not df.empty else "None",
+)
+c3.metric(
+    "Rainfall",
+    rainfall.title(),
+)
+
+st.subheader("Cleanup hotspot rankings")
+
+st.dataframe(
+    df[
+        [
+            "Rank",
+            "name",
+            "observed_litter_kg",
+            "downstream_connection_count",
+            "priority_score",
+            "estimated_leakage_kg",
+        ]
+    ],
+    use_container_width=True,
+    hide_index=True,
+)
+
+st.subheader("Priority score comparison")
+
+st.bar_chart(
+    df.set_index("name")["priority_score"]
+)
+
+st.subheader("Downstream connectivity")
+
+for _, row in df.iterrows():
+    with st.expander(row["name"]):
+        st.write(
+            "Potential downstream locations:",
+            row["downstream_pathways"] or "None",
+        )
+        st.write(
+            "Confidence:",
+            f'{row["confidence"]:.0%}',
+        )
+        st.write(
+            "Estimated leakage (illustrative):",
+            f'{row["estimated_leakage_kg"]} kg',
+        )
